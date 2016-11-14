@@ -13,7 +13,7 @@ static void *
 ngx_http_sslmon_create_main_conf( ngx_conf_t * cf );
 */
 
-static typedef struct {
+typedef struct {
 	ngx_str_t filename;
 } ngx_http_sslmon_loc_conf_t;
 
@@ -22,7 +22,7 @@ static ngx_command_t ngx_http_sslmon_commands[] = {
           NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
           ngx_conf_set_str_slot,
           NGX_HTTP_LOC_CONF_OFFSET,
-	  offsetof(ngx_http_sslmon_loc_conf, filename),
+	  offsetof(ngx_http_sslmon_loc_conf_t, filename),
 	  NULL },
 
 	ngx_null_command
