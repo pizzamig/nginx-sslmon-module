@@ -27,8 +27,23 @@ static ngx_http_module_t  ngx_http_sslmon_module_ctx = {
 	NULL                   /* merge location configration */
 };
 
+ngx_module_t hgx_http_sslmon_module = {
+	NGX_MODULE_V1,
+	ngx_http_sslmon_module_ctx,	/* module context */
+	NULL,				/* module directives */
+	NGX_HTTP_MODULE,		/* module type */
+	NULL,				/* init master */
+	NULL,				/* init module */
+	NULL,				/* init process */
+	NULL,				/* init thread */
+	NULL,				/* exit thread */
+	NULL,				/* exit process */
+	NULL,				/* exit master */
+	NGX_MODULE_V1_PADDING
+};
+
 static ngx_int_t
-ngx_http_sslmon_hander( ngx_http_request_t *r )
+ngx_http_sslmon_handler( ngx_http_request_t *r )
 {
 	return NGX_OK;
 }
