@@ -8,16 +8,24 @@
 static ngx_int_t
 ngx_http_sslmon_init( ngx_conf_t *cf );
 
-/*
 static void *
-ngx_http_sslmon_create_main_conf( ngx_conf_t * cf );
-*/
+ngx_http_sslmon_create_loc_conf( ngx_conf_t * cf );
+
+static char *
+ngx_http_sslmon_merge_loc_conf(ngx_conf_t *cf, void *prev, void *conf);
 
 typedef struct {
 	ngx_str_t filename;
+	int fd;
+	unsigned long counter;
 } ngx_http_sslmon_loc_conf_t;
 
+typedef struct {
+	unsigned long counter;
+} ngx_http_sslmon_stats_t;
+
 static ngx_command_t ngx_http_sslmon_commands[] = {
+
         { ngx_string("sslmon_output_file"),
           NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
           ngx_conf_set_str_slot,
@@ -30,17 +38,17 @@ static ngx_command_t ngx_http_sslmon_commands[] = {
 };
 
 static ngx_http_module_t  ngx_http_sslmon_module_ctx = {
-	NULL,                  /* preconfiguration */
-	ngx_http_sslmon_init,  /* postconfiguration */
+	NULL,					/* preconfiguration */
+	ngx_http_sslmon_init,			/* postconfiguration */
 
-	NULL,                  /* create main configuration */
-	NULL,                  /* init main configuration */
+	NULL,					/* create main configuration */
+	NULL,					/* init main configuration */
 
-	NULL,                  /* create server configuration */
-	NULL,                  /* merge server configuration */
+	NULL,					/* create server configuration */
+	NULL,					/* merge server configuration */
 
-	NULL,                  /* create location configration */
-	NULL                   /* merge location configration */
+	ngx_http_sslmon_create_loc_conf,	/* create location configration */
+	ngx_http_sslmon_merge_loc_conf,		/* merge location configration */
 };
 
 ngx_module_t ngx_http_sslmon_module = {
@@ -58,9 +66,52 @@ ngx_module_t ngx_http_sslmon_module = {
 	NGX_MODULE_V1_PADDING
 };
 
+#define SSLMON_STATISTIC_FILENAME "/var/log/nginx/sslmon.log"
+static void *
+ngx_http_sslmon_create_loc_conf(ngx_conf_t *cf)
+{
+	ngx_http_sslmon_loc_conf_t *conf;
+	conf = ngx_pcalloc(cf->pool, sizeof(ngx_http_sslmon_loc_conf_t));
+	if( conf == NULL ) {
+		return NULL;
+	}
+	conf->fd = NGX_CONF_UNSET;
+	conf->counter = 0;
+	return conf;
+}
+
+static char *
+ngx_http_sslmon_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
+{
+	ngx_http_sslmon_loc_conf_t *prev = parent;
+	ngx_http_sslmon_loc_conf_t *conf = child;
+
+	if ( prev->fd == NGX_CONF_UNSET ) {
+		conf->fd = open( SSLMON_STATISTIC_FILENAME, O_WRONLY | O_CREAT | O_TRUNC );
+		if ( conf->fd == -1 ) {
+			conf->fd = NGX_CONF_UNSET;
+		}
+	} else {
+		conf->fd = prev->fd;
+	}
+	conf->counter = prev->counter;
+	return NGX_CONF_OK;
+}
+
 static ngx_int_t
 ngx_http_sslmon_handler( ngx_http_request_t *r )
 {
+	ngx_http_sslmon_loc_conf_t * conf;
+	conf = ngx_http_get_module_loc_conf( r, ngx_http_sslmon_module );
+	conf->counter++;
+	if( conf->fd != NGX_CONF_UNSET ) {
+		off_t seek_rc;
+		seek_rc = lseek( conf->fd, 0, SEEK_SET );
+		dprintf( conf->fd, "%lu\n", conf->counter );
+	} else {
+		ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
+			"sslmon_handkler: fd not set");
+	}
 	return NGX_OK;
 }
 
