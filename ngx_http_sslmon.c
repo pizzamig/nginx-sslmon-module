@@ -13,6 +13,22 @@ static void *
 ngx_http_sslmon_create_main_conf( ngx_conf_t * cf );
 */
 
+static typedef struct {
+	ngx_str_t filename;
+} ngx_http_sslmon_loc_conf_t;
+
+static ngx_command_t ngx_http_sslmon_commands[] = {
+        { ngx_string("sslmon_output_file"),
+          NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
+          ngx_conf_set_str_slot,
+          NGX_HTTP_LOC_CONF_OFFSET,
+	  offsetof(ngx_http_sslmon_loc_conf, filename),
+	  NULL },
+
+	ngx_null_command
+
+};
+
 static ngx_http_module_t  ngx_http_sslmon_module_ctx = {
 	NULL,                  /* preconfiguration */
 	ngx_http_sslmon_init,  /* postconfiguration */
@@ -30,7 +46,7 @@ static ngx_http_module_t  ngx_http_sslmon_module_ctx = {
 ngx_module_t ngx_http_sslmon_module = {
 	NGX_MODULE_V1,
 	&ngx_http_sslmon_module_ctx,	/* module context */
-	NULL,				/* module directives */
+	ngx_http_sslmon_commands,	/* module directives */
 	NGX_HTTP_MODULE,		/* module type */
 	NULL,				/* init master */
 	NULL,				/* init module */
