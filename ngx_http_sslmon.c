@@ -27,9 +27,9 @@ static ngx_http_module_t  ngx_http_sslmon_module_ctx = {
 	NULL                   /* merge location configration */
 };
 
-ngx_module_t hgx_http_sslmon_module = {
+ngx_module_t ngx_http_sslmon_module = {
 	NGX_MODULE_V1,
-	ngx_http_sslmon_module_ctx,	/* module context */
+	&ngx_http_sslmon_module_ctx,	/* module context */
 	NULL,				/* module directives */
 	NGX_HTTP_MODULE,		/* module type */
 	NULL,				/* init master */
