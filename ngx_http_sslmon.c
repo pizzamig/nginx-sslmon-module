@@ -122,7 +122,7 @@ ngx_http_sslmon_init_process( ngx_cycle_t * cx )
 		return NGX_ERROR;
 	}
 	filename.len = 0;
-	filename.len = ngx_snprintf( filename.data, SSLMON_FILENAME_MAXSIZE,
+	filename.len = snprintf( (char *)filename.data, SSLMON_FILENAME_MAXSIZE,
 		"%s-%d.log", SSLMON_FILENAME_BASE,pid );
 	ngx_log_error(NGX_LOG_NOTICE, cx->log, 0,
 		"sslmon_init_process: sslmon log file %s", filename.data );
@@ -147,6 +147,25 @@ ngx_http_sslmon_handler( ngx_http_request_t *r )
 {
 	ngx_http_sslmon_main_conf_t * conf;
 	conf = ngx_http_get_module_main_conf( r, ngx_http_sslmon_module );
+
+	ngx_str_t var_name = ngx_string("ssl_cipher");
+	ngx_uint_t key;
+	ngx_http_variable_value_t * vv;
+	key = ngx_hash_key( var_name.data, var_name.len );
+	vv = ngx_http_get_variable( r, &var_name, key );
+	if( vv == NULL ) {
+		ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
+			"sslmon_handler: vv is null", conf);
+	} else {
+		if ( vv->not_found ) {
+			ngx_log_error(NGX_LOG_NOTICE, r->connection->log, 0,
+				"sslmon_handler: var %s not found in this request", var_name.data);
+		} else {
+			ngx_log_error(NGX_LOG_NOTICE, r->connection->log, 0,
+				"sslmon_handler: var %s has value %s",
+				 var_name.data, vv->data);
+		}
+	}
 	conf->counter++;
 	if( conf->fd != NGX_CONF_UNSET ) {
 		off_t seek_rc;
