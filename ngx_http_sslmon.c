@@ -64,14 +64,14 @@ static ngx_command_t ngx_http_sslmon_commands[] = {
         { ngx_string("sslmon_update_period"),
           NGX_HTTP_MAIN_CONF | NGX_CONF_TAKE1,
           ngx_conf_set_num_slot,
-          NGX_HTTP_LOC_CONF_OFFSET,
+          NGX_HTTP_MAIN_CONF_OFFSET,
 	  offsetof(ngx_http_sslmon_main_conf_t, update_period),
 	  NULL },
 
         { ngx_string("sslmon_slow_request_time"),
           NGX_HTTP_MAIN_CONF | NGX_CONF_TAKE1,
           ngx_conf_set_msec_slot,
-          NGX_HTTP_LOC_CONF_OFFSET,
+          NGX_HTTP_MAIN_CONF_OFFSET,
 	  offsetof(ngx_http_sslmon_main_conf_t, slow_request_time),
 	  NULL },
 	ngx_null_command
@@ -160,7 +160,7 @@ ngx_http_sslmon_merge_main_conf(ngx_conf_t *cf, void *c)
 		conf->slow_request_time = SSLMON_DEFAULT_SLOW_REQUEST_TIME;
 	}
 	ngx_log_error(NGX_LOG_NOTICE, cf->log, 0,
-		"sslmon_create_main_conf: update_period %u, slow_request %u ms", 
+		"sslmon_create_main_conf: update_period %l, slow_request %l ms",
 		conf->update_period, conf->slow_request_time);
 	return NGX_CONF_OK;
 }
