@@ -33,13 +33,13 @@ typedef long unsigned ngx_cnt;	/* counter */
 typedef struct {
 	ngx_cnt counter;
 /* request time statistic */
-	ngx_avg rqt_time;	/* avarage request time */ 
-	ngx_avg up_time;	/* avarage upstream time */
-	ngx_avg net_rqt_time;	/* avarage net request time */
-				/* net request time is the time */
-				/* spent in nginx only */
-	ngx_cnt slow_requests;	/* requests slower than 200ms */
-	ngx_cnt reused_session;	/* reused sessions */
+	ngx_avg rqt_time;		/* avarage request time */
+	ngx_avg up_time;		/* avarage upstream time */
+	ngx_avg net_rqt_time;		/* avarage net request time */
+					/* net request time is the time */
+					/* spent in nginx only */
+	ngx_cnt slow_requests;		/* requests slower than 200ms */
+	ngx_cnt reused_sessions;	/* reused sessions */
 } ngx_http_sslmon_stats_t;
 
 typedef struct {
@@ -141,7 +141,7 @@ static void
 ngx_http_sslmon_reset_stats( ngx_http_sslmon_stats_t * s )
 {
 	/* resetting counters */
-	s->counter = s->slow_requests = s->reused_session = 0;
+	s->counter = s->slow_requests = s->reused_sessions = 0;
 
 	/* resetting avarages */
 	s->rqt_time = s->up_time = s->net_rqt_time = 0;
@@ -282,7 +282,7 @@ ngx_http_sslmon_handler( ngx_http_request_t *r )
 			ngx_log_error(NGX_LOG_NOTICE, r->connection->log, 0,
 				"sslmon_handler: no ssl_session not reused");
 		} else {
-			stats->reused_session++;
+			stats->reused_sessions++;
 			ngx_log_error(NGX_LOG_NOTICE, r->connection->log, 0,
 				"sslmon_handler: ssl_session reused");
 		}
@@ -292,7 +292,7 @@ ngx_http_sslmon_handler( ngx_http_request_t *r )
 		seek_rc = lseek( conf->fd, 0, SEEK_SET );
 		dprintf( conf->fd, "counter=%lu\n", stats->counter );
 		dprintf( conf->fd, "slow_requests=%lu\n", stats->slow_requests );
-		dprintf( conf->fd, "reused_session=%lu\n", stats->reused_session );
+		dprintf( conf->fd, "reused_sessions=%lu\n", stats->reused_sessions );
 		dprintf( conf->fd, "avg_rt=%lf\n", stats->rqt_time );
 		dprintf( conf->fd, "avg_ut=%lf\n", stats->up_time );
 		dprintf( conf->fd, "avg_net_rt=%lf\n", stats->net_rqt_time );
