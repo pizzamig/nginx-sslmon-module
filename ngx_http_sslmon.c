@@ -198,6 +198,7 @@ ngx_http_sslmon_init_process( ngx_cycle_t * cx )
 		ngx_log_error(NGX_LOG_ERR, cx->log, 0,
 			"sslmon_init_process: file not open (%d)", errno);
 		conf->fd = NGX_CONF_UNSET;
+		return NGX_ERROR;
 	}
 	ngx_log_error(NGX_LOG_DEBUG, cx->log, 0,
 		"sslmon_init_process: starting process %d - updating conf %p", pid, conf );
@@ -216,71 +217,85 @@ ngx_http_sslmon_getvar( ngx_http_request_t *r, const char * cstr )
 }
 
 static ngx_int_t
+ngx_http_sslmon_msec_getvar( ngx_http_request_t *r, const char * cstr )
+{
+	ngx_http_variable_value_t * vv;
+	vv = ngx_http_sslmon_getvar( r, cstr );
+	if( vv == NULL ) {
+		ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
+			"sslmon_handler: var %s is null", cstr);
+		return 0;
+	}
+	if( vv->not_found ) {
+		ngx_log_error(NGX_LOG_WARN, r->connection->log, 0,
+			"sslmon_handler: no %s found", cstr);
+		return 0;
+	}
+	int sec, msec;
+	sec = msec = 0;
+	sscanf( (char *)vv->data, "%d.%d", &sec, &msec );
+	msec += 1000*sec;
+	ngx_log_error(NGX_LOG_NOTICE, r->connection->log, 0,
+		"sslmon_handler: %s %d", cstr, msec );
+	return msec;
+}
+
+static ngx_int_t
 ngx_http_sslmon_handler( ngx_http_request_t *r )
 {
 	ngx_http_sslmon_main_conf_t * conf;
 	ngx_http_sslmon_stats_t * stats;
 	unsigned int rt = 0; /* response time */
 	unsigned int ut = NGX_CONF_UNSET; /* upstream time */
+	unsigned int nrt = 0; /* nginx/net response time */
+
 	conf = ngx_http_get_module_main_conf( r, ngx_http_sslmon_module );
 	stats = conf->stats;
 
+	rt = ngx_http_sslmon_msec_getvar( r, "request_time" );
+	ut = ngx_http_sslmon_msec_getvar( r, "upstream_request_time" );
+	nrt = rt - ut;
+	if( rt > conf->slow_request_time ) {
+		stats->slow_requests++;
+	}
+
 	stats->counter++;
+	{ /* updating avarages */
+		ngx_avg sum;
+		sum = (stats->counter-1)*stats->rqt_time + (ngx_avg)rt;
+		stats->rqt_time = sum/(double)(stats->counter);
+
+		sum = (stats->counter-1)*stats->up_time + (ngx_avg)ut;
+		stats->up_time = sum/(double)(stats->counter);
+
+		sum = (stats->counter-1)*stats->net_rqt_time + (ngx_avg)nrt;
+		stats->net_rqt_time = sum/(double)(stats->counter);
+	}
 
 	ngx_http_variable_value_t * vv;
-	vv = ngx_http_sslmon_getvar( r, "request_time" );
+	vv = ngx_http_sslmon_getvar( r, "ssl_session_reused" );
 	if( vv == NULL ) {
 		ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
-			"sslmon_handler: vv is null", conf);
+			"sslmon_handler: var ssl_session_reused is null", conf);
 	} else {
 		if ( vv->not_found ) {
-			ngx_log_error(NGX_LOG_WARN, r->connection->log, 0,
-				"sslmon_handler: no request time found");
-		} else {
-			int sec, msec;
-			sec = msec = 0;
-			sscanf( vv->data, "%d.%d", &sec, &msec );
-			msec += 1000*sec;
-			if( msec > conf->slow_request_time ) {
-				stats->slow_requests++;
-			}
-			rt = msec;
 			ngx_log_error(NGX_LOG_NOTICE, r->connection->log, 0,
-				"sslmon_handler: rt %d", rt );
+				"sslmon_handler: no ssl_session not reused");
+		} else {
+			stats->reused_session++;
+			ngx_log_error(NGX_LOG_NOTICE, r->connection->log, 0,
+				"sslmon_handler: ssl_session reused");
 		}
 	}
-	vv = ngx_http_sslmon_getvar( r, "upstream_response_time" );
-	if( vv == NULL ) {
-		ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
-			"sslmon_handler: vv is null (no upstream?)", conf);
-		ut = 0;
-	} else {
-		if ( vv->not_found ) {
-			ngx_log_error(NGX_LOG_WARN, r->connection->log, 0,
-				"sslmon_handler: no usptream here");
-			ut = 0;
-		} else {
-			int sec, msec;
-			sec = msec = 0;
-			sscanf( vv->data, "%d.%d", &sec, &msec );
-			msec += 1000*sec;
-			if( msec > conf->slow_request_time ) {
-				stats->slow_requests++;
-			}
-			ut = msec;
-			ngx_log_error(NGX_LOG_NOTICE, r->connection->log, 0,
-				"sslmon_handler: ut %d", ut );
-		}
-	}
-/*
-			ngx_log_error(NGX_LOG_NOTICE, r->connection->log, 0,
-				"sslmon_handler: var %s has value %s",
-				 var_name.data, vv->data);
-*/
 	if( conf->fd != NGX_CONF_UNSET ) {
 		off_t seek_rc;
 		seek_rc = lseek( conf->fd, 0, SEEK_SET );
-		dprintf( conf->fd, "%lu\n", stats->counter );
+		dprintf( conf->fd, "counter=%lu\n", stats->counter );
+		dprintf( conf->fd, "slow_requests=%lu\n", stats->slow_requests );
+		dprintf( conf->fd, "reused_session=%lu\n", stats->reused_session );
+		dprintf( conf->fd, "avg_rt=%lf\n", stats->rqt_time );
+		dprintf( conf->fd, "avg_ut=%lf\n", stats->up_time );
+		dprintf( conf->fd, "avg_net_rt=%lf\n", stats->net_rqt_time );
 		ngx_log_error(NGX_LOG_DEBUG, r->connection->log, 0,
 			"sslmon_handler: Updating counter %d from pid %d",
 			stats->counter, ngx_getpid());
