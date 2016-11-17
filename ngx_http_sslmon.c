@@ -5,27 +5,6 @@
 #include <ngx_http.h>
 #include <nginx.h>
 
-/* ****************************** */
-/* Function prototype definitions */
-/* ****************************** */
-static ngx_int_t
-ngx_http_sslmon_init( ngx_conf_t *cf );
-
-static void *
-ngx_http_sslmon_create_main_conf( ngx_conf_t * cf );
-
-static char *
-ngx_http_sslmon_merge_main_conf(ngx_conf_t *cf, void *conf);
-
-static ngx_int_t
-ngx_http_sslmon_init_process( ngx_cycle_t * cx );
-
-static ngx_int_t
-ngx_http_sslmon_exit_process( ngx_cycle_t * cx );
-
-static void
-ngx_http_sslmon_write_report( ngx_event_t *ev );
-
 /* ************************ */
 /* Types/structs definition */
 /* ************************ */
@@ -51,6 +30,30 @@ typedef struct {
 	int fd;
 	ngx_http_sslmon_stats_t * stats;
 } ngx_http_sslmon_main_conf_t;
+
+/* ****************************** */
+/* Function prototype definitions */
+/* ****************************** */
+static ngx_int_t
+ngx_http_sslmon_init( ngx_conf_t *cf );
+
+static void *
+ngx_http_sslmon_create_main_conf( ngx_conf_t * cf );
+
+static char *
+ngx_http_sslmon_merge_main_conf(ngx_conf_t *cf, void *conf);
+
+static ngx_int_t
+ngx_http_sslmon_init_process( ngx_cycle_t * cx );
+
+static ngx_int_t
+ngx_http_sslmon_exit_process( ngx_cycle_t * cx );
+
+static void
+ngx_http_sslmon_set_timer( ngx_http_sslmon_main_conf_t *c, ngx_log_t *l );
+
+static void
+ngx_http_sslmon_write_report( ngx_event_t *ev );
 
 /* *********** */
 /* Nginx timer */
@@ -175,6 +178,15 @@ ngx_http_sslmon_merge_main_conf(ngx_conf_t *cf, void *c)
 	return NGX_CONF_OK;
 }
 
+static void
+ngx_http_sslmon_set_timer( ngx_http_sslmon_main_conf_t *c, ngx_log_t *log )
+{
+	ngx_http_sslmon_timer.handler = ngx_http_sslmon_write_report;
+	ngx_http_sslmon_timer.log = log;
+	ngx_http_sslmon_timer.data = c;
+	ngx_add_timer( &ngx_http_sslmon_timer, c->update_period * 1000 );
+}
+
 #define SSLMON_FILENAME_BASE "/var/log/nginx/sslmon/sslmon"
 #define SSLMON_FILENAME_MAXSIZE 512
 static ngx_int_t
@@ -214,10 +226,7 @@ ngx_http_sslmon_init_process( ngx_cycle_t * cx )
 		return NGX_ERROR;
 	}
 /* preparing the timer */
-	ngx_http_sslmon_timer.handler = ngx_http_sslmon_write_report;
-	ngx_http_sslmon_timer.log = cx->log;
-	ngx_http_sslmon_timer.data = conf;
-	ngx_add_timer( &ngx_http_sslmon_timer, conf->update_period * 1000 );
+	ngx_http_sslmon_set_timer( conf, cx->log );
 	ngx_log_error(NGX_LOG_DEBUG, cx->log, 0,
 		"sslmon_init_process: starting process %d - updating conf %p", pid, conf );
 	return NGX_OK;
@@ -316,7 +325,7 @@ ngx_http_sslmon_write_report( ngx_event_t *ev )
 
 	conf = ev->data;
 	stats = conf->stats;
-
+	ngx_http_sslmon_set_timer( conf, ev->log );
 	if( conf->fd != NGX_CONF_UNSET ) {
 		ngx_log_error(NGX_LOG_NOTICE, ev->log, 0,
 			"sslmon_write_report: Updating report (counting %d) of pid %d",
