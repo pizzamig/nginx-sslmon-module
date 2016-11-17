@@ -13,13 +13,9 @@ typedef double ngx_avg;		/* avarage */
 typedef long unsigned ngx_cnt;	/* counter */
 
 typedef struct {
-	ngx_cnt counter;
-/* request time statistic */
-	ngx_avg rqt_time;		/* avarage request time */
-	ngx_avg up_time;		/* avarage upstream time */
-	ngx_avg net_rqt_time;		/* avarage net request time */
-					/* net request time is the time */
-					/* spent in nginx only */
+	ngx_cnt counter;		/* requests counter */
+	ngx_cnt rt_sum;			/* req time sum */
+	ngx_cnt ut_sum;			/* upstream time sum */
 	ngx_cnt slow_requests;		/* requests slower than 200ms */
 	ngx_cnt reused_sessions;	/* reused sessions */
 } ngx_http_sslmon_stats_t;
@@ -75,14 +71,14 @@ static ngx_command_t ngx_http_sslmon_commands[] = {
 
         { ngx_string("sslmon_update_period"),
           NGX_HTTP_MAIN_CONF | NGX_CONF_TAKE1,
-          ngx_conf_set_num_slot,
+          ngx_conf_set_msec_slot,
           NGX_HTTP_MAIN_CONF_OFFSET,
 	  offsetof(ngx_http_sslmon_main_conf_t, update_period),
 	  NULL },
 
         { ngx_string("sslmon_slow_request_time"),
           NGX_HTTP_MAIN_CONF | NGX_CONF_TAKE1,
-          ngx_conf_set_msec_slot,
+          ngx_conf_set_num_slot,
           NGX_HTTP_MAIN_CONF_OFFSET,
 	  offsetof(ngx_http_sslmon_main_conf_t, slow_request_time),
 	  NULL },
@@ -154,9 +150,7 @@ ngx_http_sslmon_reset_stats( ngx_http_sslmon_stats_t * s )
 {
 	/* resetting counters */
 	s->counter = s->slow_requests = s->reused_sessions = 0;
-
-	/* resetting avarages */
-	s->rqt_time = s->up_time = s->net_rqt_time = 0;
+	s->rt_sum = s->ut_sum = 0;
 }
 
 
@@ -172,8 +166,8 @@ ngx_http_sslmon_merge_main_conf(ngx_conf_t *cf, void *c)
 		conf->slow_request_time = SSLMON_DEFAULT_SLOW_REQUEST_TIME;
 	}
 	ngx_log_error(NGX_LOG_NOTICE, cf->log, 0,
-		"sslmon_create_main_conf: update_period %l, slow_request %l ms",
-		conf->update_period, conf->slow_request_time);
+		"sslmon_merge_main_conf: update_period %l s, slow_request %l ms",
+		conf->update_period/1000, conf->slow_request_time);
 	ngx_http_sslmon_reset_stats( stats );
 	return NGX_CONF_OK;
 }
@@ -184,7 +178,7 @@ ngx_http_sslmon_set_timer( ngx_http_sslmon_main_conf_t *c, ngx_log_t *log )
 	ngx_http_sslmon_timer.handler = ngx_http_sslmon_write_report;
 	ngx_http_sslmon_timer.log = log;
 	ngx_http_sslmon_timer.data = c;
-	ngx_add_timer( &ngx_http_sslmon_timer, c->update_period * 1000 );
+	ngx_add_timer( &ngx_http_sslmon_timer, c->update_period );
 }
 
 #define SSLMON_FILENAME_BASE "/var/log/nginx/sslmon/sslmon"
@@ -275,6 +269,7 @@ ngx_http_sslmon_handler( ngx_http_request_t *r )
 	unsigned int rt = 0; /* response time */
 	unsigned int ut = NGX_CONF_UNSET; /* upstream time */
 	unsigned int nrt = 0; /* nginx/net response time */
+	unsigned long epoch = 0; /* request epoch */
 
 	conf = ngx_http_get_module_main_conf( r, ngx_http_sslmon_module );
 	stats = conf->stats;
@@ -285,19 +280,9 @@ ngx_http_sslmon_handler( ngx_http_request_t *r )
 	if( rt > conf->slow_request_time ) {
 		stats->slow_requests++;
 	}
-
 	stats->counter++;
-	{ /* updating avarages */
-		ngx_avg sum;
-		sum = (stats->counter-1)*stats->rqt_time + (ngx_avg)rt;
-		stats->rqt_time = sum/(double)(stats->counter);
-
-		sum = (stats->counter-1)*stats->up_time + (ngx_avg)ut;
-		stats->up_time = sum/(double)(stats->counter);
-
-		sum = (stats->counter-1)*stats->net_rqt_time + (ngx_avg)nrt;
-		stats->net_rqt_time = sum/(double)(stats->counter);
-	}
+	stats->rt_sum += rt;
+	stats->ut_sum += ut;
 
 	ngx_http_variable_value_t * vv;
 	vv = ngx_http_sslmon_getvar( r, "ssl_session_reused" );
@@ -332,17 +317,22 @@ ngx_http_sslmon_write_report( ngx_event_t *ev )
 			stats->counter, ngx_getpid());
 		off_t seek_rc;
 		seek_rc = lseek( conf->fd, 0, SEEK_SET );
+		dprintf( conf->fd, "epoch=%lu\n", ngx_time() );
 		dprintf( conf->fd, "counter=%lu\n", stats->counter );
 		dprintf( conf->fd, "slow_requests=%lu\n", stats->slow_requests );
 		dprintf( conf->fd, "reused_sessions=%lu\n", stats->reused_sessions );
-		dprintf( conf->fd, "avg_rt=%lf\n", stats->rqt_time );
-		dprintf( conf->fd, "avg_ut=%lf\n", stats->up_time );
-		dprintf( conf->fd, "avg_net_rt=%lf\n", stats->net_rqt_time );
+		dprintf( conf->fd, "avg_rt=%lf\n",
+			stats->rt_sum/(double)(stats->counter) );
+		dprintf( conf->fd, "avg_ut=%lf\n",
+			stats->ut_sum/(double)(stats->counter) );
+		dprintf( conf->fd, "avg_net_rt=%lf\n",
+			 (stats->rt_sum-stats->ut_sum)/(double)(stats->counter) );
 	} else {
 		ngx_log_error(NGX_LOG_ERR, ev->log, 0,
 			"sslmon_handler: fd not set - conf %p", conf);
 	}
 	/* reset all counters */
+	ngx_http_sslmon_reset_stats( stats );
 }
 
 static ngx_int_t
