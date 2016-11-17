@@ -23,6 +23,9 @@ ngx_http_sslmon_init_process( ngx_cycle_t * cx );
 static ngx_int_t
 ngx_http_sslmon_exit_process( ngx_cycle_t * cx );
 
+static void
+ngx_http_sslmon_write_report( ngx_event_t *ev );
+
 /* ************************ */
 /* Types/structs definition */
 /* ************************ */
@@ -49,13 +52,19 @@ typedef struct {
 	ngx_http_sslmon_stats_t * stats;
 } ngx_http_sslmon_main_conf_t;
 
+/* *********** */
+/* Nginx timer */
+/* *********** */
+
+static ngx_event_t ngx_http_sslmon_timer;
+
 /* ************************ */
 /* Nginx module definitions */
 /* ************************ */
 
 /* How often the statistic file has to be written */
-/* default: every 1000 requests */
-#define SSLMON_DEFAULT_UPDATE_PERIOD 1000
+/* default: every 300 seconds */
+#define SSLMON_DEFAULT_UPDATE_PERIOD 300
 
 /* A reuqest is considered slow if it takes more than 200ms */
 #define SSLMON_DEFAULT_SLOW_REQUEST_TIME 200
@@ -162,6 +171,7 @@ ngx_http_sslmon_merge_main_conf(ngx_conf_t *cf, void *c)
 	ngx_log_error(NGX_LOG_NOTICE, cf->log, 0,
 		"sslmon_create_main_conf: update_period %l, slow_request %l ms",
 		conf->update_period, conf->slow_request_time);
+	ngx_http_sslmon_reset_stats( stats );
 	return NGX_CONF_OK;
 }
 
@@ -172,11 +182,13 @@ ngx_http_sslmon_init_process( ngx_cycle_t * cx )
 {
 	ngx_http_sslmon_main_conf_t * conf =
 		ngx_http_cycle_get_module_main_conf( cx, ngx_http_sslmon_module );
-	if( conf == NULL ) {
+	if( conf == NULL ) { /* paranoid check */
 		ngx_log_error(NGX_LOG_ERR, cx->log, 0,
-			"sslmon_init_process: file not open (%d)", errno);
+			"sslmon_init_process: not conf found");
 		return NGX_OK;
 	}
+
+/* create the log filename appending the pid */
 	ngx_pid_t pid = ngx_getpid();
 	ngx_str_t filename;
 	filename.data = ngx_pcalloc(cx->pool, SSLMON_FILENAME_MAXSIZE);
@@ -190,6 +202,7 @@ ngx_http_sslmon_init_process( ngx_cycle_t * cx )
 		"%s-%d.log", SSLMON_FILENAME_BASE,pid );
 	ngx_log_error(NGX_LOG_NOTICE, cx->log, 0,
 		"sslmon_init_process: sslmon log file %s", filename.data );
+/* opening the log file */
 	conf->fd = ngx_open_file( filename.data, NGX_FILE_WRONLY,
 		NGX_FILE_TRUNCATE | NGX_FILE_NONBLOCK,
 		S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH );
@@ -200,6 +213,11 @@ ngx_http_sslmon_init_process( ngx_cycle_t * cx )
 		conf->fd = NGX_CONF_UNSET;
 		return NGX_ERROR;
 	}
+/* preparing the timer */
+	ngx_http_sslmon_timer.handler = ngx_http_sslmon_write_report;
+	ngx_http_sslmon_timer.log = cx->log;
+	ngx_http_sslmon_timer.data = conf;
+	ngx_add_timer( &ngx_http_sslmon_timer, conf->update_period * 1000 );
 	ngx_log_error(NGX_LOG_DEBUG, cx->log, 0,
 		"sslmon_init_process: starting process %d - updating conf %p", pid, conf );
 	return NGX_OK;
@@ -279,15 +297,30 @@ ngx_http_sslmon_handler( ngx_http_request_t *r )
 			"sslmon_handler: var ssl_session_reused is null", conf);
 	} else {
 		if ( vv->not_found ) {
-			ngx_log_error(NGX_LOG_NOTICE, r->connection->log, 0,
+			ngx_log_error(NGX_LOG_INFO, r->connection->log, 0,
 				"sslmon_handler: no ssl_session not reused");
 		} else {
 			stats->reused_sessions++;
-			ngx_log_error(NGX_LOG_NOTICE, r->connection->log, 0,
+			ngx_log_error(NGX_LOG_INFO, r->connection->log, 0,
 				"sslmon_handler: ssl_session reused");
 		}
 	}
+	return NGX_OK;
+}
+
+static void
+ngx_http_sslmon_write_report( ngx_event_t *ev )
+{
+	ngx_http_sslmon_main_conf_t * conf;
+	ngx_http_sslmon_stats_t * stats;
+
+	conf = ev->data;
+	stats = conf->stats;
+
 	if( conf->fd != NGX_CONF_UNSET ) {
+		ngx_log_error(NGX_LOG_NOTICE, ev->log, 0,
+			"sslmon_write_report: Updating report (counting %d) of pid %d",
+			stats->counter, ngx_getpid());
 		off_t seek_rc;
 		seek_rc = lseek( conf->fd, 0, SEEK_SET );
 		dprintf( conf->fd, "counter=%lu\n", stats->counter );
@@ -296,14 +329,11 @@ ngx_http_sslmon_handler( ngx_http_request_t *r )
 		dprintf( conf->fd, "avg_rt=%lf\n", stats->rqt_time );
 		dprintf( conf->fd, "avg_ut=%lf\n", stats->up_time );
 		dprintf( conf->fd, "avg_net_rt=%lf\n", stats->net_rqt_time );
-		ngx_log_error(NGX_LOG_DEBUG, r->connection->log, 0,
-			"sslmon_handler: Updating counter %d from pid %d",
-			stats->counter, ngx_getpid());
 	} else {
-		ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
+		ngx_log_error(NGX_LOG_ERR, ev->log, 0,
 			"sslmon_handler: fd not set - conf %p", conf);
 	}
-	return NGX_OK;
+	/* reset all counters */
 }
 
 static ngx_int_t
