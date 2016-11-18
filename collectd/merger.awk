@@ -22,6 +22,8 @@ BEGIN { epoch_counter=0;
 /^avg_net_rt/		{ avg_net_rt = avg_net_rt + $2 }
 
 END {
+	if ( epoch_counter == 0 )
+		epoch_counter = 1;
 	avg_rt = avg_rt / epoch_counter;
 	avg_ut = avg_ut / epoch_counter;
 	avg_net_rt = avg_net_rt / epoch_counter;
