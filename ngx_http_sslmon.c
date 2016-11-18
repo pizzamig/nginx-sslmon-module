@@ -21,10 +21,11 @@ typedef struct {
 } ngx_http_sslmon_stats_t;
 
 typedef struct {
-	ngx_uint_t	update_period;
-	ngx_uint_t	slow_request_time;
-	int fd;
-	ngx_http_sslmon_stats_t * stats;
+	ngx_uint_t			update_period;
+	ngx_uint_t			slow_request_time;
+	int 				fd;
+	ngx_http_sslmon_stats_t * 	stats;
+	ngx_str_t			filename;
 } ngx_http_sslmon_main_conf_t;
 
 /* ****************************** */
@@ -199,20 +200,19 @@ ngx_http_sslmon_init_process( ngx_cycle_t * cx )
 
 /* create the log filename appending the pid */
 	ngx_pid_t pid = ngx_getpid();
-	ngx_str_t filename;
-	filename.data = ngx_pcalloc(cx->pool, SSLMON_FILENAME_MAXSIZE);
-	if( filename.data == NULL ) {
+	conf->filename.data = ngx_pcalloc(cx->pool, SSLMON_FILENAME_MAXSIZE);
+	if( conf->filename.data == NULL ) {
 		ngx_log_error(NGX_LOG_ERR, cx->log, 0,
 			"sslmon_init_process:: not able to allocate");
 		return NGX_ERROR;
 	}
-	filename.len = 0;
-	filename.len = snprintf( (char *)filename.data, SSLMON_FILENAME_MAXSIZE,
+	conf->filename.len = 0;
+	conf->filename.len = snprintf( (char *)conf->filename.data, SSLMON_FILENAME_MAXSIZE,
 		"%s-%d.log", SSLMON_FILENAME_BASE,pid );
 	ngx_log_error(NGX_LOG_NOTICE, cx->log, 0,
-		"sslmon_init_process: sslmon log file %s", filename.data );
+		"sslmon_init_process: sslmon log file %s", conf->filename.data );
 /* opening the log file */
-	conf->fd = ngx_open_file( filename.data, NGX_FILE_WRONLY,
+	conf->fd = ngx_open_file( conf->filename.data, NGX_FILE_WRONLY,
 		NGX_FILE_TRUNCATE | NGX_FILE_NONBLOCK,
 		S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH );
 
@@ -235,8 +235,9 @@ ngx_http_sslmon_exit_process( ngx_cycle_t * cx )
 	ngx_http_sslmon_main_conf_t * conf =
 		ngx_http_cycle_get_module_main_conf( cx, ngx_http_sslmon_module );
 	ngx_event_del_timer( &ngx_http_sslmon_timer );
-	ngx_http_sslmon_write_report( conf, cx->log );
+	/* ngx_http_sslmon_write_report( conf, cx->log ); */
 	(void)close( conf->fd );
+	(void)unlink( (char *)conf->filename.data );
 }
 
 static ngx_http_variable_value_t *
@@ -332,12 +333,18 @@ ngx_http_sslmon_write_report( ngx_http_sslmon_main_conf_t *conf, ngx_log_t *l )
 		dprintf( conf->fd, "counter=%lu\n", stats->counter );
 		dprintf( conf->fd, "slow_requests=%lu\n", stats->slow_requests );
 		dprintf( conf->fd, "reused_sessions=%lu\n", stats->reused_sessions );
-		dprintf( conf->fd, "avg_rt=%lf\n",
-			stats->rt_sum/(double)(stats->counter) );
-		dprintf( conf->fd, "avg_ut=%lf\n",
-			stats->ut_sum/(double)(stats->counter) );
-		dprintf( conf->fd, "avg_net_rt=%lf\n",
-			 (stats->rt_sum-stats->ut_sum)/(double)(stats->counter) );
+		if( stats->counter != 0 ) {
+			dprintf( conf->fd, "avg_rt=%lf\n",
+				stats->rt_sum/(double)(stats->counter) );
+			dprintf( conf->fd, "avg_ut=%lf\n",
+				stats->ut_sum/(double)(stats->counter) );
+			dprintf( conf->fd, "avg_net_rt=%lf\n",
+				(stats->rt_sum-stats->ut_sum)/(double)(stats->counter) );
+		} else {
+			dprintf( conf->fd, "avg_rt=0.0\n");
+			dprintf( conf->fd, "avg_ut=0.0\n");
+			dprintf( conf->fd, "avg_net_rt=0.0\n");
+		}
 	} else {
 		ngx_log_error(NGX_LOG_ERR, l, 0,
 			"sslmon_handler: fd not set - conf %p", conf);
