@@ -328,11 +328,15 @@ ngx_http_sslmon_write_report( ngx_http_sslmon_main_conf_t *conf, ngx_log_t *l )
 	stats = conf->stats;
 	ngx_http_sslmon_set_timer( conf, l );
 	if( conf->fd != NGX_CONF_UNSET ) {
+		int rc;
 		ngx_log_error(NGX_LOG_NOTICE, l, 0,
 			"sslmon_write_report: Updating report (counting %d) of pid %d",
 			stats->counter, ngx_getpid());
-		off_t seek_rc;
-		seek_rc = lseek( conf->fd, 0, SEEK_SET );
+		rc = ftruncate( conf->fd, 0 );
+		if( rc != 0 ) {
+			ngx_log_error(NGX_LOG_NOTICE, l, 0,
+				"sslmon_write_report: ftruncate didn't work - %d", errno );
+		}
 		dprintf( conf->fd, "epoch=%lu\n", ngx_time() );
 		dprintf( conf->fd, "counter=%lu\n", stats->counter );
 		dprintf( conf->fd, "slow_requests=%lu\n", stats->slow_requests );
