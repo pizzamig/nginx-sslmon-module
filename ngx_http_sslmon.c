@@ -289,7 +289,7 @@ ngx_http_sslmon_handler( ngx_http_request_t *r )
 	stats = conf->stats;
 
 	rt = ngx_http_sslmon_msec_getvar( r, "request_time" );
-	ut = ngx_http_sslmon_msec_getvar( r, "upstream_request_time" );
+	ut = ngx_http_sslmon_msec_getvar( r, "upstream_response_time" );
 	nrt = rt - ut;
 	if( rt > conf->slow_request_time ) {
 		stats->slow_requests++;
