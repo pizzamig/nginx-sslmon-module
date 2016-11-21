@@ -244,6 +244,7 @@ static ngx_http_variable_value_t *
 ngx_http_sslmon_getvar( ngx_http_request_t *r, const char * cstr )
 {
 	ngx_str_t var_name = ngx_string(cstr);
+	var_name.len=strlen(cstr);
 	ngx_uint_t key;
 	ngx_http_variable_value_t * vv;
 	key = ngx_hash_key( var_name.data, var_name.len );
@@ -254,6 +255,8 @@ ngx_http_sslmon_getvar( ngx_http_request_t *r, const char * cstr )
 static ngx_int_t
 ngx_http_sslmon_msec_getvar( ngx_http_request_t *r, const char * cstr )
 {
+	char tmpstr[10];
+	bzero(tmpstr, 10);
 	ngx_http_variable_value_t * vv;
 	vv = ngx_http_sslmon_getvar( r, cstr );
 	if( vv == NULL ) {
@@ -268,7 +271,8 @@ ngx_http_sslmon_msec_getvar( ngx_http_request_t *r, const char * cstr )
 	}
 	int sec, msec;
 	sec = msec = 0;
-	sscanf( (char *)vv->data, "%d.%d", &sec, &msec );
+	strncpy( tmpstr, (char *)vv->data, vv->len );
+	sscanf( tmpstr, "%d.%d", &sec, &msec );
 	msec += 1000*sec;
 	ngx_log_error(NGX_LOG_NOTICE, r->connection->log, 0,
 		"sslmon_handler: %s %d", cstr, msec );
@@ -304,7 +308,7 @@ ngx_http_sslmon_handler( ngx_http_request_t *r )
 		ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
 			"sslmon_handler: var ssl_session_reused is null", conf);
 	} else {
-		if ( vv->not_found ) {
+		if ( vv->not_found || vv->data[0] == '.' ) {
 			ngx_log_error(NGX_LOG_INFO, r->connection->log, 0,
 				"sslmon_handler: no ssl_session not reused");
 		} else {
