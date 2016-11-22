@@ -324,9 +324,7 @@ static void
 ngx_http_sslmon_write_report( ngx_http_sslmon_main_conf_t *conf, ngx_log_t *l )
 {
 	ngx_http_sslmon_stats_t * stats;
-
 	stats = conf->stats;
-	ngx_http_sslmon_set_timer( conf, l );
 	if( conf->fd != NGX_CONF_UNSET ) {
 		int rc;
 		ngx_log_error(NGX_LOG_NOTICE, l, 0,
@@ -367,6 +365,15 @@ ngx_http_sslmon_timer_handler( ngx_event_t *ev )
 {
 	ngx_http_sslmon_main_conf_t * conf;
 	conf = ev->data;
+	if ( ngx_exiting == 1 ) {
+		ngx_log_error(NGX_LOG_NOTICE, ev->log, 0,
+			"sslmon_timer_handler: quitting -> destroying timer", conf);
+		ngx_event_del_timer( &ngx_http_sslmon_timer );
+	} else {
+		ngx_http_sslmon_set_timer( conf, ev->log );
+		ngx_log_error(NGX_LOG_NOTICE, ev->log, 0,
+			"sslmon_timer_handler: re-setting timer", conf);
+	}
 	ngx_http_sslmon_write_report( conf, ev->log );
 }
 
