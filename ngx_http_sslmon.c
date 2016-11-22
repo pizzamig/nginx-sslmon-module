@@ -330,7 +330,7 @@ ngx_http_sslmon_write_report( ngx_http_sslmon_main_conf_t *conf, ngx_log_t *l )
 			stats->counter, ngx_getpid());
 		rc = ftruncate( conf->fd, 0 );
 		if( rc != 0 ) {
-			ngx_log_error(NGX_LOG_WARNINg, l, 0,
+			ngx_log_error(NGX_LOG_WARN, l, 0,
 				"sslmon_write_report: ftruncate didn't work - %d", errno );
 		}
 		lseek( conf->fd, 0, SEEK_SET );
