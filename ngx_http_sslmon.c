@@ -337,6 +337,7 @@ ngx_http_sslmon_write_report( ngx_http_sslmon_main_conf_t *conf, ngx_log_t *l )
 			ngx_log_error(NGX_LOG_NOTICE, l, 0,
 				"sslmon_write_report: ftruncate didn't work - %d", errno );
 		}
+		lseek( conf->fd, 0, SEEK_SET );
 		dprintf( conf->fd, "epoch=%lu\n", ngx_time() );
 		dprintf( conf->fd, "counter=%lu\n", stats->counter );
 		dprintf( conf->fd, "slow_requests=%lu\n", stats->slow_requests );
