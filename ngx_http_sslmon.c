@@ -234,8 +234,6 @@ ngx_http_sslmon_exit_process( ngx_cycle_t * cx )
 {
 	ngx_http_sslmon_main_conf_t * conf =
 		ngx_http_cycle_get_module_main_conf( cx, ngx_http_sslmon_module );
-	ngx_event_del_timer( &ngx_http_sslmon_timer );
-	/* ngx_http_sslmon_write_report( conf, cx->log ); */
 	(void)close( conf->fd );
 	(void)unlink( (char *)conf->filename.data );
 }
@@ -336,6 +334,8 @@ ngx_http_sslmon_write_report( ngx_http_sslmon_main_conf_t *conf, ngx_log_t *l )
 				"sslmon_write_report: ftruncate didn't work - %d", errno );
 		}
 		lseek( conf->fd, 0, SEEK_SET );
+		dprintf( conf->fd, "update_period=%lu\n", conf->update_period);
+		dprintf( conf->fd, "slow_response_time=%lu\n", conf->update_period);
 		dprintf( conf->fd, "epoch=%lu\n", ngx_time() );
 		dprintf( conf->fd, "counter=%lu\n", stats->counter );
 		dprintf( conf->fd, "slow_requests=%lu\n", stats->slow_requests );
@@ -367,8 +367,7 @@ ngx_http_sslmon_timer_handler( ngx_event_t *ev )
 	conf = ev->data;
 	if ( ngx_exiting == 1 ) {
 		ngx_log_error(NGX_LOG_NOTICE, ev->log, 0,
-			"sslmon_timer_handler: quitting -> destroying timer", conf);
-		ngx_event_del_timer( &ngx_http_sslmon_timer );
+			"sslmon_timer_handler: quitting -> no timer anymore", conf);
 	} else {
 		ngx_http_sslmon_set_timer( conf, ev->log );
 		ngx_log_error(NGX_LOG_NOTICE, ev->log, 0,
