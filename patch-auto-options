@@ -1,0 +1,18 @@
+--- auto/options.orig	2016-11-23 13:29:06.631542000 +0100
++++ auto/options	2016-11-23 13:28:38.576307000 +0100
+@@ -59,6 +59,7 @@
+ HTTP_CHARSET=YES
+ HTTP_GZIP=YES
+ HTTP_SSL=NO
++HTTP_SSLMON=NO
+ HTTP_V2=NO
+ HTTP_SSI=YES
+ HTTP_POSTPONE=NO
+@@ -218,6 +219,7 @@
+         --http-scgi-temp-path=*)         NGX_HTTP_SCGI_TEMP_PATH="$value" ;;
+ 
+         --with-http_ssl_module)          HTTP_SSL=YES               ;;
++        --with-http_sslmon_module)       HTTP_SSLMON=YES            ;;
+         --with-http_v2_module)           HTTP_V2=YES                ;;
+         --with-http_realip_module)       HTTP_REALIP=YES            ;;
+         --with-http_addition_module)     HTTP_ADDITION=YES          ;;
