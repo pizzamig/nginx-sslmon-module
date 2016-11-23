@@ -9,6 +9,7 @@ merger()
 		epoch=0;
 		counter=0;
 		slow_requests=0;
+		ssl_errors=0;
 		reused_sessions=0;
 		avg_rt=0.0;
 		avg_ut=0.0;
@@ -21,6 +22,7 @@ merger()
 			}
 	/^counter/		{ counter = counter + $2 }
 	/^slow_requests/	{ slow_requests = slow_requests + $2 }
+	/^ssl_errors/		{ ssl_errors = ssl_errors + $2 }
 	/^reused_sessions/	{ reused_sessions = reused_sessions + $2 }
 	/^avg_rt/		{ avg_rt = avg_rt + $2 }
 	/^avg_ut/		{ avg_ut = avg_ut + $2 }
@@ -34,6 +36,7 @@ merger()
 		printf "epoch=%d\n",epoch;
 		printf "counter=%d\n",counter;
 		printf "slow_requests=%d\n", slow_requests;
+		printf "ssl_errors=%d\n", ssl_errors;
 		printf "reused_sessions=%d\n", reused_sessions;
 		printf "avg_rt=%d\n", avg_rt;
 		printf "avg_ut=%d\n", avg_ut;
@@ -48,6 +51,7 @@ do
 		data_epoch=${start_epoch}
 		requests=0
 		slow_requests=0
+		ssl_errors=0
 		reused_sessions=0
 		request_time=0
 		upstream_time=0
@@ -61,6 +65,7 @@ do
 		fi
 		requests=$(awk -F= '/^counter/ { print $2 }' ${MERGEFILE})
 		slow_requests=$(awk -F= '/^slow_requests/ { print $2 }' ${MERGEFILE})
+		ssl_errors=$(awk -F= '/^ssl_errors/ { print $2 }' ${MERGEFILE})
 		reused_sessions=$(awk -F= '/^reused_sessions/ { print $2 }' ${MERGEFILE})
 		request_time=$(awk -F= '/^avg_rt/ { print $2 }' ${MERGEFILE})
 		upstream_time=$(awk -F= '/^avg_ut/ { print $2 }' ${MERGEFILE})
@@ -71,6 +76,7 @@ do
 	#rrdtool updatev sslmon.rrd -s ${data_epoch}:${requests}:${slow_requests}:${reused_sessions}:${request_time}:${upstream_time}:${ssl_time}
 	echo PUTVAL "${IDENTIFIER}counter-requests" interval=$UPDATE_PERIOD ${data_epoch}:${requests}
 	echo PUTVAL "${IDENTIFIER}counter-slow_requests" interval=$UPDATE_PERIOD ${data_epoch}:${slow_requests}
+	echo PUTVAL "${IDENTIFIER}counter-ssl_errors" interval=$UPDATE_PERIOD ${data_epoch}:${ssl_errors}
 	echo PUTVAL "${IDENTIFIER}counter-reused_sessions" interval=$UPDATE_PERIOD ${data_epoch}:${reused_sessions}
 	echo PUTVAL "${IDENTIFIER}total_time_in_ms-request_time" interval=$UPDATE_PERIOD ${data_epoch}:${request_time}
 	echo PUTVAL "${IDENTIFIER}total_time_in_ms-upstream_time" interval=$UPDATE_PERIOD ${data_epoch}:${upstream_time}
