@@ -32,7 +32,7 @@ typedef struct {
 /* ****************************** */
 
 void
-ngx_http_sslmon_increments_ssl_handshake_errors();
+ngx_http_sslmon_increment_ssl_handshake_errors();
 
 static ngx_int_t
 ngx_http_sslmon_init( ngx_conf_t *cf );
@@ -154,7 +154,7 @@ ngx_http_sslmon_create_main_conf(ngx_conf_t *cf)
 }
 
 void
-ngx_http_sslmon_increments_ssl_handshake_errors()
+ngx_http_sslmon_increment_ssl_handshake_errors()
 {
 	ngx_http_sslmon_ssl_handshake_errors++;
 }
