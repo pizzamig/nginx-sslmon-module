@@ -17,7 +17,7 @@
  
 +#if (NGX_HTTP_SSLMON)
 +        /* counting chipers errors */
-+	ngx_http_sslmon_increment_ssk_handshake_errors();
++	ngx_http_sslmon_increment_ssl_handshake_errors();
 +#endif
      ngx_log_error(NGX_LOG_INFO, c->log, 0, "client closed connection");
      ngx_http_close_connection(c);
