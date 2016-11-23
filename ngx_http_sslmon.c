@@ -9,7 +9,6 @@
 /* Types/structs definition */
 /* ************************ */
 
-typedef double ngx_avg;		/* avarage */
 typedef long unsigned ngx_cnt;	/* counter */
 
 typedef struct {
@@ -31,6 +30,10 @@ typedef struct {
 /* ****************************** */
 /* Function prototype definitions */
 /* ****************************** */
+
+void
+ngx_http_sslmon_increments_ssl_handshake_errors();
+
 static ngx_int_t
 ngx_http_sslmon_init( ngx_conf_t *cf );
 
@@ -55,11 +58,12 @@ ngx_http_sslmon_timer_handler( ngx_event_t *ev );
 static void
 ngx_http_sslmon_write_report( ngx_http_sslmon_main_conf_t *conf, ngx_log_t *l );
 
-/* *********** */
-/* Nginx timer */
-/* *********** */
+/* ********************** */
+/* Global variables timer */
+/* ********************** */
 
-static ngx_event_t ngx_http_sslmon_timer;
+ngx_cnt ngx_http_sslmon_ssl_handshake_errors;	/* SSL handshake errors */
+ngx_event_t ngx_http_sslmon_timer;		/* write report timer */
 
 /* ************************ */
 /* Nginx module definitions */
@@ -149,14 +153,20 @@ ngx_http_sslmon_create_main_conf(ngx_conf_t *cf)
 	return conf;
 }
 
+void
+ngx_http_sslmon_increments_ssl_handshake_errors()
+{
+	ngx_http_sslmon_ssl_handshake_errors++;
+}
+
 static void
 ngx_http_sslmon_reset_stats( ngx_http_sslmon_stats_t * s )
 {
 	/* resetting counters */
 	s->counter = s->slow_requests = s->reused_sessions = 0;
 	s->rt_sum = s->ut_sum = 0;
+	ngx_http_sslmon_ssl_handshake_errors = 0;
 }
-
 
 static char *
 ngx_http_sslmon_merge_main_conf(ngx_conf_t *cf, void *c)
@@ -286,9 +296,11 @@ ngx_http_sslmon_handler( ngx_http_request_t *r )
 	unsigned int ut = NGX_CONF_UNSET; /* upstream time */
 	unsigned int nrt = 0; /* nginx/net response time */
 	unsigned long epoch = 0; /* request epoch */
+	ngx_ssl_connection_t * connection;
 
 	conf = ngx_http_get_module_main_conf( r, ngx_http_sslmon_module );
 	stats = conf->stats;
+	connection = r->connection->ssl;
 
 	rt = ngx_http_sslmon_msec_getvar( r, "request_time" );
 	ut = ngx_http_sslmon_msec_getvar( r, "upstream_response_time" );
@@ -340,6 +352,7 @@ ngx_http_sslmon_write_report( ngx_http_sslmon_main_conf_t *conf, ngx_log_t *l )
 		dprintf( conf->fd, "counter=%lu\n", stats->counter );
 		dprintf( conf->fd, "slow_requests=%lu\n", stats->slow_requests );
 		dprintf( conf->fd, "reused_sessions=%lu\n", stats->reused_sessions );
+		dprintf( conf->fd, "ssl_errors=%lu\n", ngx_http_sslmon_ssl_handshake_errors );
 		if( stats->counter != 0 ) {
 			dprintf( conf->fd, "avg_rt=%lf\n",
 				stats->rt_sum/(double)(stats->counter) );
