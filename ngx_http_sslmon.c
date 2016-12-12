@@ -12,11 +12,17 @@
 typedef long unsigned ngx_cnt;	/* counter */
 
 typedef struct {
+	ngx_str_t name;
+	ngx_cnt counter;
+} ngx_http_sslmon_ciphers_cnt_t;
+
+typedef struct {
 	ngx_cnt counter;		/* requests counter */
 	ngx_cnt rt_sum;			/* req time sum */
 	ngx_cnt ut_sum;			/* upstream time sum */
 	ngx_cnt slow_requests;		/* requests slower than 200ms */
 	ngx_cnt reused_sessions;	/* reused sessions */
+	ngx_array_t* ciphers_cnt;	/* ciphers counter */
 } ngx_http_sslmon_stats_t;
 
 typedef struct {
@@ -150,6 +156,8 @@ ngx_http_sslmon_create_main_conf(ngx_conf_t *cf)
 			"sslmon_create_main_conf: stats store at %p", conf);
 	}
 	conf->stats = stats;
+	stats->ciphers_cnt =
+		ngx_array_create( cf->pool, 15, sizeof( ngx_http_sslmon_ciphers_cnt_t ));
 	return conf;
 }
 
