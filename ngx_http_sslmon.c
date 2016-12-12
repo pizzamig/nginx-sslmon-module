@@ -393,16 +393,22 @@ ngx_http_sslmon_handler( ngx_http_request_t *r )
 
 	/* direct access to ssl information, avoiding variable parsing */
 	if (ssl_connection && ssl_connection->connection ) {
+		/* resued session counter */
 		if( SSL_session_reused(ssl_connection->connection)) {
 			stats->reused_sessions++;
 			ngx_log_error(NGX_LOG_DEBUG, r->connection->log, 0,
 				"sslmon_handler: ssl_session reused");
 		}
+		/* ciphers statistic */
 		const char * cipher_name = SSL_get_cipher_name(ssl_connection->connection);
-		/*
-		if ( find_and_incr(cipher_name) )
-		else push_cipher;
-		*/
+		if ( ngx_http_sslmon_find_and_incr_cipher( stats->ciphers_cnt , cipher_name) ) {
+			ngx_log_error(NGX_LOG_DEBUG, r->connection->log, 0,
+				"sslmon_handler: incrementing the counter %s", cipher_name);
+		} else {
+			ngx_http_sslmon_add_cipher( stats->ciphers_cnt, cipher_name );
+			ngx_log_error(NGX_LOG_DEBUG, r->connection->log, 0,
+				"sslmon_handler: adding a counter for the cipher %s", cipher_name);
+		}
 	}
 	return NGX_OK;
 }
@@ -441,6 +447,15 @@ ngx_http_sslmon_write_report( ngx_http_sslmon_main_conf_t *conf, ngx_log_t *l )
 			dprintf( conf->fd, "avg_rt=0.0\n");
 			dprintf( conf->fd, "avg_ut=0.0\n");
 			dprintf( conf->fd, "avg_net_rt=0.0\n");
+		}
+		ngx_uint_t i = 0;
+		ngx_http_sslmon_ciphers_cnt_t * ciphers = stats->ciphers_cnt->elts;
+		for( i=0; i<stats->ciphers_cnt->nelts; i++ ) {
+			if( ciphers[i].counter != 0 ) {
+				dprintf( conf->fd, "cipher.%s=%d\n",
+					ciphers[i].name, ciphers[i].counter );
+				ciphers[i].counter = 0;
+			}
 		}
 	} else {
 		ngx_log_error(NGX_LOG_ERR, l, 0,
