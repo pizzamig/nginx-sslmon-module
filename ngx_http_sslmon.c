@@ -12,7 +12,7 @@
 typedef long unsigned ngx_cnt;	/* counter */
 
 typedef struct {
-	ngx_str_t name;
+	char * name;
 	ngx_cnt counter;
 } ngx_http_sslmon_ciphers_cnt_t;
 
@@ -128,6 +128,36 @@ ngx_module_t ngx_http_sslmon_module = {
 	NGX_MODULE_V1_PADDING
 };
 
+static void
+ngx_http_sslmon_add_cipher(ngx_array_t * cnt_array, const char * cipher_name)
+{
+	ngx_http_sslmon_ciphers_cnt_t cc, * ccp;
+	cc.name = (char *)cipher_name;
+	cc.counter = 1;
+	ccp = ngx_array_push(cnt_array);
+	if( ccp == NULL ) {
+		/* disaster */
+		return;
+	}
+	*ccp = cc;
+}
+
+static int
+ngx_http_sslmon_find_and_incr_cipher( ngx_array_t * cnt_array, const char * cipher_name)
+{
+	ngx_uint_t i = 0;
+	ngx_http_sslmon_ciphers_cnt_t * ciphers = cnt_array->elts;
+	size_t len = strlen(cipher_name);
+	for( i=0; i == cnt_array->nelts ; i++) {
+		size_t len2 = strlen( ciphers[i].name );
+		if( strncmp( cipher_name, ciphers[i].name, ngx_max(len,len2) ) == 0 ) {
+			ciphers[i].counter++;
+			return 1; /* true */
+		}
+	}
+	return 0; /* false */
+}
+
 static void *
 ngx_http_sslmon_create_main_conf(ngx_conf_t *cf)
 {
@@ -173,6 +203,8 @@ ngx_http_sslmon_reset_stats( ngx_http_sslmon_stats_t * s )
 	/* resetting counters */
 	s->counter = s->slow_requests = s->reused_sessions = 0;
 	s->rt_sum = s->ut_sum = 0;
+	ngx_array_init( s->ciphers_cnt, s->ciphers_cnt->pool, 25,
+		sizeof( ngx_http_sslmon_ciphers_cnt_t ));
 	ngx_http_sslmon_ssl_handshake_errors = 0;
 }
 
@@ -366,6 +398,11 @@ ngx_http_sslmon_handler( ngx_http_request_t *r )
 			ngx_log_error(NGX_LOG_DEBUG, r->connection->log, 0,
 				"sslmon_handler: ssl_session reused");
 		}
+		const char * cipher_name = SSL_get_cipher_name(ssl_connection->connection);
+		/*
+		if ( find_and_incr(cipher_name) )
+		else push_cipher;
+		*/
 	}
 	return NGX_OK;
 }
