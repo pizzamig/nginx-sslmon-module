@@ -293,7 +293,9 @@ ngx_http_sslmon_handler( ngx_http_request_t *r )
 	ngx_http_sslmon_main_conf_t * conf;
 	ngx_http_sslmon_stats_t * stats;
 	unsigned int rt = 0; /* response time */
+	unsigned int new_rt = 0; /* response time */
 	unsigned int ut = NGX_CONF_UNSET; /* upstream time */
+	unsigned int new_ut = 0; /* response time */
 	unsigned int nrt = 0; /* nginx/net response time */
 	unsigned long epoch = 0; /* request epoch */
 	ngx_ssl_connection_t * connection;
@@ -303,7 +305,41 @@ ngx_http_sslmon_handler( ngx_http_request_t *r )
 	connection = r->connection->ssl;
 
 	rt = ngx_http_sslmon_msec_getvar( r, "request_time" );
+	/* Trying to get the same information without parsing strings */
+	new_rt = (ngx_cached_time->sec - r->start_sec ) * 1000 + ngx_cached_time->msec - r->start_msec;
+	ngx_log_error(NGX_LOG_INFO, r->connection->log, 0,
+		"sslmon_handler: variable rt %d, struct rt %d ", rt, new_rt);
 	ut = ngx_http_sslmon_msec_getvar( r, "upstream_response_time" );
+	if ( r->upstream_states == NULL || r->upstream_states->nelts == 0 )
+		ut = 0;
+	} else {
+		ngx_uint_t i=0;
+		ngx_msec_int_t ms;
+		ngx_http_upstream_state_t *state;
+		state = r->upstream_states->elts;
+		for( ;; ) {
+			if( state[i].status ) {
+				ms = state[i].response_time;
+			}
+			ms = ngx_max(ms, 0);
+			new_ut += ms;
+			i++;
+			if( i == r->upstream_states->nelts ) {
+				break;
+			}
+			if (state[i].peer) {
+				;
+			} else {
+				i++;
+				if( i == r->upstream_states->nelts ) {
+					break;
+				}
+				continue;
+			}
+		}
+	}
+	ngx_log_error(NGX_LOG_INFO, r->connection->log, 0,
+		"sslmon_handler: variable ut %d, struct ut %d ", ut, new_ut);
 	nrt = rt - ut;
 	if( rt > conf->slow_request_time ) {
 		stats->slow_requests++;
