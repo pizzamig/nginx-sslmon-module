@@ -148,7 +148,7 @@ ngx_http_sslmon_find_and_incr_cipher( ngx_array_t * cnt_array, const char * ciph
 	ngx_uint_t i = 0;
 	ngx_http_sslmon_ciphers_cnt_t * ciphers = cnt_array->elts;
 	size_t len = strlen(cipher_name);
-	for( i=0; i == cnt_array->nelts ; i++) {
+	for( i=0; i < cnt_array->nelts ; i++) {
 		size_t len2 = strlen( ciphers[i].name );
 		if( strncmp( cipher_name, ciphers[i].name, ngx_max(len,len2) ) == 0 ) {
 			ciphers[i].counter++;
