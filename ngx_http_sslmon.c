@@ -282,7 +282,7 @@ ngx_http_sslmon_msec_getvar( ngx_http_request_t *r, const char * cstr )
 	strncpy( tmpstr, (char *)vv->data, vv->len );
 	sscanf( tmpstr, "%d.%d", &sec, &msec );
 	msec += 1000*sec;
-	ngx_log_error(NGX_LOG_NOTICE, r->connection->log, 0,
+	ngx_log_error(NGX_LOG_INFO, r->connection->log, 0,
 		"sslmon_handler: %s %d", cstr, msec );
 	return msec;
 }
@@ -298,19 +298,22 @@ ngx_http_sslmon_handler( ngx_http_request_t *r )
 	unsigned int new_ut = 0; /* response time */
 	unsigned int nrt = 0; /* nginx/net response time */
 	unsigned long epoch = 0; /* request epoch */
-	ngx_ssl_connection_t * connection;
+	ngx_ssl_connection_t * ssl_connection;
 
 	conf = ngx_http_get_module_main_conf( r, ngx_http_sslmon_module );
 	stats = conf->stats;
-	connection = r->connection->ssl;
+	ssl_connection = r->connection->ssl;
 
-	rt = ngx_http_sslmon_msec_getvar( r, "request_time" );
-	/* Trying to get the same information without parsing strings */
-	new_rt = (ngx_cached_time->sec - r->start_sec ) * 1000 + ngx_cached_time->msec - r->start_msec;
-	ngx_log_error(NGX_LOG_INFO, r->connection->log, 0,
-		"sslmon_handler: variable rt %d, struct rt %d ", rt, new_rt);
-	ut = ngx_http_sslmon_msec_getvar( r, "upstream_response_time" );
-	if ( r->upstream_states == NULL || r->upstream_states->nelts == 0 )
+	/* variable access is deprecated */
+	/* rt = ngx_http_sslmon_msec_getvar( r, "request_time" ); */
+	/* ut = ngx_http_sslmon_msec_getvar( r, "upstream_response_time" ); */
+	/* get the response time */
+	rt = (ngx_cached_time->sec - r->start_sec ) * 1000 + ngx_cached_time->msec - r->start_msec;
+	ngx_log_error(NGX_LOG_DEBUG, r->connection->log, 0,
+		"sslmon_handler: response time %d ms", rt);
+
+	/* get the upstream time */
+	if ( r->upstream_states == NULL || r->upstream_states->nelts == 0 ) {
 		ut = 0;
 	} else {
 		ngx_uint_t i=0;
@@ -322,7 +325,7 @@ ngx_http_sslmon_handler( ngx_http_request_t *r )
 				ms = state[i].response_time;
 			}
 			ms = ngx_max(ms, 0);
-			new_ut += ms;
+			ut += ms;
 			i++;
 			if( i == r->upstream_states->nelts ) {
 				break;
@@ -338,8 +341,8 @@ ngx_http_sslmon_handler( ngx_http_request_t *r )
 			}
 		}
 	}
-	ngx_log_error(NGX_LOG_INFO, r->connection->log, 0,
-		"sslmon_handler: variable ut %d, struct ut %d ", ut, new_ut);
+	ngx_log_error(NGX_LOG_DEBUG, r->connection->log, 0,
+		"sslmon_handler: upstream time %d ms", ut);
 	nrt = rt - ut;
 	if( rt > conf->slow_request_time ) {
 		stats->slow_requests++;
@@ -348,18 +351,11 @@ ngx_http_sslmon_handler( ngx_http_request_t *r )
 	stats->rt_sum += rt;
 	stats->ut_sum += ut;
 
-	ngx_http_variable_value_t * vv;
-	vv = ngx_http_sslmon_getvar( r, "ssl_session_reused" );
-	if( vv == NULL ) {
-		ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
-			"sslmon_handler: var ssl_session_reused is null", conf);
-	} else {
-		if ( vv->not_found || vv->data[0] == '.' ) {
-			ngx_log_error(NGX_LOG_INFO, r->connection->log, 0,
-				"sslmon_handler: no ssl_session not reused");
-		} else {
+	/* direct access to ssl information, avoiding variable parsing */
+	if (ssl_connection && ssl_connection->connection ) {
+		if( SSL_session_reused(ssl_connection->connection)) {
 			stats->reused_sessions++;
-			ngx_log_error(NGX_LOG_INFO, r->connection->log, 0,
+			ngx_log_error(NGX_LOG_DEBUG, r->connection->log, 0,
 				"sslmon_handler: ssl_session reused");
 		}
 	}
