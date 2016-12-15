@@ -334,8 +334,8 @@ ngx_http_sslmon_handler( ngx_http_request_t *r )
 	ngx_http_sslmon_stats_t * stats;
 	unsigned int rt = 0; /* response time */
 	unsigned int new_rt = 0; /* response time */
-	unsigned int ut = NGX_CONF_UNSET; /* upstream time */
-	unsigned int new_ut = 0; /* response time */
+	unsigned int ut = 0; /* upstream time */
+	unsigned int stable_ut = 0; /* response time */
 	unsigned int nrt = 0; /* nginx/net response time */
 	unsigned long epoch = 0; /* request epoch */
 	ngx_ssl_connection_t * ssl_connection;
@@ -346,7 +346,7 @@ ngx_http_sslmon_handler( ngx_http_request_t *r )
 
 	/* variable access is deprecated */
 	/* rt = ngx_http_sslmon_msec_getvar( r, "request_time" ); */
-	/* ut = ngx_http_sslmon_msec_getvar( r, "upstream_response_time" ); */
+	stable_ut = ngx_http_sslmon_msec_getvar( r, "upstream_response_time" );
 	/* get the response time */
 	rt = (ngx_cached_time->sec - r->start_sec ) * 1000 + ngx_cached_time->msec - r->start_msec;
 	ngx_log_error(NGX_LOG_DEBUG, r->connection->log, 0,
@@ -363,6 +363,14 @@ ngx_http_sslmon_handler( ngx_http_request_t *r )
 		for( ;; ) {
 			if( state[i].status ) {
 				ms = state[i].response_time;
+				if ( ms > 600000 ) {
+					/* if the response time is bigger than 10 minutes */
+					/* ms is holding an epoch in millisecond */
+					 ngx_log_error(NGX_LOG_NOTICE, r->connection->log, 0,
+						"sslmon_handler: state %d has huge ut", i);
+					/* probably for a not yet completed request */
+					ms = 0;
+				}
 			}
 			ms = ngx_max(ms, 0);
 			ut += ms;
@@ -381,15 +389,19 @@ ngx_http_sslmon_handler( ngx_http_request_t *r )
 			}
 		}
 	}
+	if ( ut != stable_ut ) {
+		ngx_log_error(NGX_LOG_WARN, r->connection->log, 0,
+			"sslmon_handler: upstream time %d ms, but ut = %d", stable_ut, ut);
+	}
 	ngx_log_error(NGX_LOG_DEBUG, r->connection->log, 0,
 		"sslmon_handler: upstream time %d ms", ut);
-	nrt = rt - ut;
+	nrt = rt - stable_ut;
 	if( rt > conf->slow_request_time ) {
 		stats->slow_requests++;
 	}
 	stats->counter++;
 	stats->rt_sum += rt;
-	stats->ut_sum += ut;
+	stats->ut_sum += stable_ut;
 
 	/* direct access to ssl information, avoiding variable parsing */
 	if (ssl_connection && ssl_connection->connection ) {
