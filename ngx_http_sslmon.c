@@ -333,10 +333,8 @@ ngx_http_sslmon_handler( ngx_http_request_t *r )
 	ngx_http_sslmon_main_conf_t * conf;
 	ngx_http_sslmon_stats_t * stats;
 	unsigned int rt = 0; /* response time */
-	unsigned int new_rt = 0; /* response time */
 	unsigned int ut = 0; /* upstream time */
-	unsigned int stable_ut = 0; /* response time */
-	unsigned int nrt = 0; /* nginx/net response time */
+	unsigned int nrt = 0; /* nginx/ssl response time */
 	unsigned long epoch = 0; /* request epoch */
 	ngx_ssl_connection_t * ssl_connection;
 
@@ -344,9 +342,10 @@ ngx_http_sslmon_handler( ngx_http_request_t *r )
 	stats = conf->stats;
 	ssl_connection = r->connection->ssl;
 
-	/* variable access is deprecated */
+	/* variable access is deprecated, we access directly the source of the information */
 	/* rt = ngx_http_sslmon_msec_getvar( r, "request_time" ); */
-	stable_ut = ngx_http_sslmon_msec_getvar( r, "upstream_response_time" );
+	/* ut = ngx_http_sslmon_msec_getvar( r, "upstream_response_time" ); */
+
 	/* get the response time */
 	rt = (ngx_cached_time->sec - r->start_sec ) * 1000 + ngx_cached_time->msec - r->start_msec;
 	ngx_log_error(NGX_LOG_DEBUG, r->connection->log, 0,
@@ -389,19 +388,15 @@ ngx_http_sslmon_handler( ngx_http_request_t *r )
 			}
 		}
 	}
-	if ( ut != stable_ut ) {
-		ngx_log_error(NGX_LOG_WARN, r->connection->log, 0,
-			"sslmon_handler: upstream time %d ms, but ut = %d", stable_ut, ut);
-	}
 	ngx_log_error(NGX_LOG_DEBUG, r->connection->log, 0,
 		"sslmon_handler: upstream time %d ms", ut);
-	nrt = rt - stable_ut;
+	nrt = rt - ut;
 	if( rt > conf->slow_request_time ) {
 		stats->slow_requests++;
 	}
 	stats->counter++;
 	stats->rt_sum += rt;
-	stats->ut_sum += stable_ut;
+	stats->ut_sum += ut;
 
 	/* direct access to ssl information, avoiding variable parsing */
 	if (ssl_connection && ssl_connection->connection ) {
