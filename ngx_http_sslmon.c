@@ -459,7 +459,7 @@ ngx_http_sslmon_write_report( ngx_http_sslmon_main_conf_t *conf, ngx_log_t *l )
 		ngx_http_sslmon_ciphers_cnt_t * ciphers = stats->ciphers_cnt->elts;
 		for( i=0; i<stats->ciphers_cnt->nelts; i++ ) {
 			if( ciphers[i].counter != 0 ) {
-				dprintf( conf->fd, "cipher.%s=%d\n",
+				dprintf( conf->fd, "cipher.%s=%lu\n",
 					ciphers[i].name, ciphers[i].counter );
 				ciphers[i].counter = 0;
 			}
