@@ -334,7 +334,6 @@ ngx_http_sslmon_handler( ngx_http_request_t *r )
 	ngx_http_sslmon_stats_t * stats;
 	unsigned int rt = 0; /* response time */
 	unsigned int ut = 0; /* upstream time */
-	unsigned int nrt = 0; /* nginx/ssl response time */
 	unsigned long epoch = 0; /* request epoch */
 	ngx_ssl_connection_t * ssl_connection;
 
@@ -356,7 +355,7 @@ ngx_http_sslmon_handler( ngx_http_request_t *r )
 		ut = 0;
 	} else {
 		ngx_uint_t i=0;
-		ngx_msec_int_t ms;
+		ngx_msec_int_t ms = 0;
 		ngx_http_upstream_state_t *state;
 		state = r->upstream_states->elts;
 		for( ;; ) {
@@ -388,9 +387,15 @@ ngx_http_sslmon_handler( ngx_http_request_t *r )
 			}
 		}
 	}
+	if ( ut > rt ) {
+		ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
+			"sslmon_handler: upstream time %d bigger than response time %d - Fixing",
+			ut, rt);
+		/* That shouldn't happen */
+		ut = rt;
+	}
 	ngx_log_error(NGX_LOG_DEBUG, r->connection->log, 0,
 		"sslmon_handler: upstream time %d ms", ut);
-	nrt = rt - ut;
 	if( rt > conf->slow_request_time ) {
 		stats->slow_requests++;
 	}
